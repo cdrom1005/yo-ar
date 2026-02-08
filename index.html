@@ -1,151 +1,192 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        
-        #ui-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 10000;
-        }
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
 
-        #start-btn {
-            padding: 15px 40px; background: #007AFF; color: white;
-            border: none; border-radius: 30px; font-size: 18px;
-            cursor: pointer; display: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
+    #ui-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #111; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 10000;
+    }
 
-        .loader {
-            border: 4px solid #333; border-top: 4px solid #007AFF;
-            border-radius: 50%; width: 40px; height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #start-btn {
+      padding: 15px 40px; background: #007AFF; color: white;
+      border: none; border-radius: 30px; font-size: 18px;
+      cursor: pointer; display: none;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
 
-        #scan-guide {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 250px; height: 250px; border: 2px dashed rgba(255,255,255,0.5);
-            border-radius: 20px; display: none; z-index: 9000; pointer-events: none;
-        }
-    </style>
+    .loader {
+      border: 4px solid #333; border-top: 4px solid #007AFF;
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    #scan-guide {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 250px; height: 250px; border: 2px dashed rgba(255,255,255,0.5);
+      border-radius: 20px; display: none; z-index: 9000; pointer-events: none;
+    }
+  </style>
 </head>
 <body>
 
-    <div id="ui-overlay">
-        <div class="loader" id="loader"></div>
-        <p id="status" style="color: white; margin-top: 15px;">資源載入中 (0/7)...</p>
-        <button id="start-btn">開始掃描</button>
-    </div>
+  <div id="ui-overlay">
+    <div class="loader" id="loader"></div>
+    <p id="status" style="color: white; margin-top: 15px;">資源載入中 (0/7)...</p>
+    <button id="start-btn">開始掃描</button>
+  </div>
 
-    <div id="scan-guide"></div>
+  <div id="scan-guide"></div>
 
-    <a-scene 
-        mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: no; uiLoading: no;" 
-        renderer="antialias: true; precision: highp; colorManagement: true;" 
-        color-space="sRGB" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-        
-        <a-assets id="assets-list"></a-assets>
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: no; uiLoading: no;"
+    renderer="antialias: true; precision: highp; colorManagement: true;"
+    color-space="sRGB"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
 
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-assets id="assets-list"></a-assets>
 
-        <div id="targets-container"></div>
-    </a-scene>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <script>
-        const assetContainer = document.querySelector("#assets-list");
-        const targetsContainer = document.querySelector("#targets-container");
-        const uiOverlay = document.querySelector("#ui-overlay");
-        const startBtn = document.querySelector("#start-btn");
-        const statusText = document.querySelector("#status");
-        const scanGuide = document.querySelector("#scan-guide");
+    <!-- ✅ 重要：用 a-entity 當容器，不要用 div -->
+    <a-entity id="targets-container"></a-entity>
+  </a-scene>
 
-        const TOTAL = 7;
-        let loadedCount = 0;
+  <script>
+    const assetContainer = document.querySelector("#assets-list");
+    const targetsContainer = document.querySelector("#targets-container");
+    const uiOverlay = document.querySelector("#ui-overlay");
+    const startBtn = document.querySelector("#start-btn");
+    const statusText = document.querySelector("#status");
+    const scanGuide = document.querySelector("#scan-guide");
+    const loader = document.querySelector("#loader");
 
-        const checkReady = () => {
-            loadedCount++;
-            statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
-            if (loadedCount >= TOTAL) {
-                document.getElementById("loader").style.display = "none";
-                statusText.innerText = "準備就緒";
-                startBtn.style.display = "block";
-            }
-        };
+    const TOTAL = 7;
+    let loadedCount = 0;
+    let unlocked = false;
 
-        for (let i = 0; i < TOTAL; i++) {
-            const fileId = (i + 1).toString().padStart(2, '0');
+    const checkReady = () => {
+      loadedCount++;
+      statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
+      if (loadedCount >= TOTAL) {
+        loader.style.display = "none";
+        statusText.innerText = "準備就緒";
+        startBtn.style.display = "block";
+      }
+    };
 
-            // 1. Video 設定 (加強兼容性)
-            const video = document.createElement('video');
-            video.id = `v-${fileId}`;
-            video.src = `./${fileId}.mp4`;
-            video.setAttribute('preload', 'auto');
-            video.setAttribute('loop', 'true');
-            video.setAttribute('crossorigin', 'anonymous');
-            // 必須明確設為 true，某些 iOS 版本才吃得到
-            video.setAttribute('webkit-playsinline', 'true');
-            video.setAttribute('playsinline', 'true');
-            video.muted = true; 
-            assetContainer.appendChild(video);
+    // 讓同一時間只播放一支（避免多支疊音/耗效能）
+    let currentPlaying = null;
+    const stopCurrent = () => {
+      if (currentPlaying && !currentPlaying.paused) {
+        currentPlaying.pause();
+      }
+      currentPlaying = null;
+    };
 
-            // 2. 實體設定
-            const targetEntity = document.createElement('a-entity');
-            targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
-            
-            const videoEntity = document.createElement('a-video');
-            videoEntity.id = `ent-${fileId}`;
-            videoEntity.setAttribute('src', `#v-${fileId}`);
-            videoEntity.setAttribute('width', '1');
-            videoEntity.setAttribute('height', '1');
-            
-            // 🔥 關鍵修正：將 Z 軸設為 0.1，避免與圖片重疊 (解決黑畫面/閃爍)
-            videoEntity.setAttribute('position', '0 0 0.1'); 
-            
-            targetEntity.appendChild(videoEntity);
-            targetsContainer.appendChild(targetEntity);
+    for (let i = 0; i < TOTAL; i++) {
+      const fileId = (i + 1).toString().padStart(2, '0');
 
-            // 3. 載入檢查
-            video.addEventListener('loadedmetadata', () => {
-                const aspect = video.videoHeight / video.videoWidth;
-                videoEntity.setAttribute('height', aspect);
-                checkReady();
-            });
-            if (video.readyState >= 1) checkReady();
+      // 1) Video asset
+      const video = document.createElement('video');
+      video.id = `v-${fileId}`;
+      video.src = `./${fileId}.mp4`;
+      video.setAttribute('preload', 'auto');
+      video.setAttribute('loop', 'true');
+      video.setAttribute('crossorigin', 'anonymous');
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('playsinline', 'true');
+      video.muted = true; // iOS 自動播放/解鎖需要
+      assetContainer.appendChild(video);
 
-            // 4. 偵測事件
-            targetEntity.addEventListener("targetFound", () => {
-                console.log(`🎯 發現目標 ${fileId}`);
-                scanGuide.style.display = "none";
-                video.muted = false;
-                video.play();
-            });
+      // 2) Target entity
+      const targetEntity = document.createElement('a-entity');
+      targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
 
-            targetEntity.addEventListener("targetLost", () => {
-                console.log(`❌ 遺失目標 ${fileId}`);
-                scanGuide.style.display = "block";
-                video.pause();
-            });
+      const videoEntity = document.createElement('a-video');
+      videoEntity.id = `ent-${fileId}`;
+      videoEntity.setAttribute('src', `#v-${fileId}`);
+      videoEntity.setAttribute('width', '1');
+      videoEntity.setAttribute('height', '1');
+
+      // ✅ 關鍵：先不要推 Z，保持 0，跟你「正常版」一致
+      videoEntity.setAttribute('position', '0 0 0');
+
+      // ✅ 關鍵：用材質設定避免 z-fighting（比推 Z 更穩）
+      // shader: flat 避免受光影影響；depthTest/depthWrite 關掉避免深度閃爍/黑片
+      videoEntity.setAttribute('material', 'shader: flat; transparent: true; depthTest: false; depthWrite: false;');
+
+      targetEntity.appendChild(videoEntity);
+      targetsContainer.appendChild(targetEntity);
+
+      // 3) loadedmetadata -> 設定比例
+      const onMeta = () => {
+        const aspect = video.videoHeight / video.videoWidth;
+        if (isFinite(aspect) && aspect > 0) {
+          videoEntity.setAttribute('height', aspect);
         }
+        checkReady();
+        video.removeEventListener('loadedmetadata', onMeta);
+      };
+      video.addEventListener('loadedmetadata', onMeta);
 
-        // 啟動按鈕
-        startBtn.addEventListener('click', () => {
-            uiOverlay.style.display = "none";
-            scanGuide.style.display = "block";
-            
-            const allVideos = document.querySelectorAll('video');
-            allVideos.forEach(v => {
-                // 嘗試播放一小段黑畫面來「暖機」
-                v.play().then(() => {
-                    v.pause();
-                    v.currentTime = 0;
-                }).catch(err => console.log("影片解鎖:", err));
-            });
-        });
-    </script>
+      // 某些瀏覽器 metadata 已可用
+      if (video.readyState >= 1) {
+        onMeta();
+      }
+
+      // 4) MindAR events
+      targetEntity.addEventListener("targetFound", () => {
+        console.log(`🎯 發現目標 ${fileId}`);
+        scanGuide.style.display = "none";
+
+        // 同時間只允許一支播
+        if (currentPlaying && currentPlaying !== video) stopCurrent();
+        currentPlaying = video;
+
+        // 解鎖後才能穩播（未解鎖就忽略播放指令，避免 iOS 擋）
+        if (!unlocked) return;
+
+        video.muted = false;
+        const p = video.play();
+        if (p && typeof p.catch === "function") {
+          p.catch(err => console.log("播放失敗:", err));
+        }
+      });
+
+      targetEntity.addEventListener("targetLost", () => {
+        console.log(`❌ 遺失目標 ${fileId}`);
+        scanGuide.style.display = "block";
+        video.pause();
+        if (currentPlaying === video) currentPlaying = null;
+      });
+    }
+
+    // 啟動按鈕：解鎖所有影片播放權限（iOS 必要）
+    startBtn.addEventListener('click', async () => {
+      uiOverlay.style.display = "none";
+      scanGuide.style.display = "block";
+
+      const allVideos = document.querySelectorAll('video');
+      for (const v of allVideos) {
+        try {
+          await v.play();
+          v.pause();
+          v.currentTime = 0;
+        } catch (err) {
+          console.log("影片解鎖失敗:", err);
+        }
+      }
+      unlocked = true;
+      console.log("✅ 影音權限已解鎖，等待掃描");
+    });
+  </script>
 </body>
 </html>
