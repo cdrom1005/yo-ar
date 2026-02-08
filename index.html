@@ -1,147 +1,91 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 10000;
+const assetContainer = document.querySelector("#assets-list");
+const targetsContainer = document.querySelector("#targets-container");
+const uiOverlay = document.querySelector("#ui-overlay");
+const startBtn = document.querySelector("#start-btn");
+const statusText = document.querySelector("#status");
+const scanGuide = document.querySelector("#scan-guide");
+const sceneEl = document.querySelector("#ar-scene");
+
+const TOTAL = 7;
+let loadedCount = 0;
+
+// 1. 生成 .mind 檔案列表路徑
+const mindFiles = Array.from({length: TOTAL}, (_, i) => `./${(i+1).toString().padStart(2, '0')}.mind`).join('; ');
+
+// 2. 將 autoStart 改為 false，避免網頁一打開就搶相機權限導致失敗
+sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${mindFiles}; autoStart: false; uiScanning: no; uiLoading: no;`);
+
+// 3. 生成資源
+for (let i = 1; i <= TOTAL; i++) {
+    const id = i.toString().padStart(2, '0');
+
+    // Video 資源
+    const video = document.createElement('video');
+    video.id = `v-${id}`;
+    video.src = `./${id}.mp4`;
+    video.setAttribute('preload', 'auto');
+    video.setAttribute('loop', 'true');
+    video.setAttribute('crossorigin', 'anonymous');
+    video.setAttribute('webkit-playsinline', '');
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    assetContainer.appendChild(video);
+
+    // Target 實體
+    const targetEntity = document.createElement('a-entity');
+    targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i-1}`);
+    
+    const videoEntity = document.createElement('a-video');
+    videoEntity.id = `ent-${id}`;
+    videoEntity.setAttribute('src', `#v-${id}`);
+    videoEntity.setAttribute('width', '1');
+    videoEntity.setAttribute('height', '1');
+    
+    targetEntity.appendChild(videoEntity);
+    targetsContainer.appendChild(targetEntity);
+
+    video.addEventListener('loadedmetadata', () => {
+        const aspect = video.videoHeight / video.videoWidth;
+        videoEntity.setAttribute('height', aspect);
+        loadedCount++;
+        statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
+        if (loadedCount === TOTAL) {
+            document.getElementById("loader").style.display = "none";
+            statusText.innerText = "全部就緒，請開啟相機";
+            startBtn.style.display = "block";
         }
-        #start-btn {
-            padding: 15px 40px; background: #007AFF; color: white;
-            border: none; border-radius: 30px; font-size: 18px;
-            cursor: pointer; display: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-        .loader {
-            border: 4px solid #333; border-top: 4px solid #007AFF;
-            border-radius: 50%; width: 40px; height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #scan-guide {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 250px; height: 250px; border: 2px dashed rgba(255,255,255,0.5);
-            border-radius: 20px; display: none; z-index: 9000; pointer-events: none;
-        }
-    </style>
-</head>
-<body>
+    });
 
-    <div id="ui-overlay">
-        <div class="loader" id="loader"></div>
-        <p id="status" style="color: white; margin-top: 15px;">AR 資源載入中 (0/7)...</p>
-        <button id="start-btn">確認並開啟相機</button>
-    </div>
+    targetEntity.addEventListener("targetFound", () => {
+        scanGuide.style.display = "none";
+        video.muted = false;
+        video.play();
+    });
 
-    <div id="scan-guide"></div>
+    targetEntity.addEventListener("targetLost", () => {
+        scanGuide.style.display = "block";
+        video.pause();
+    });
+}
 
-    <a-scene 
-        id="ar-scene"
-        renderer="antialias: true; precision: highp; colorManagement: true;" 
-        color-space="sRGB" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-        
-        <a-assets id="assets-list"></a-assets>
+// 4. 修改後的啟動按鈕邏輯
+startBtn.addEventListener('click', () => {
+    // A. 隱藏 UI
+    uiOverlay.style.display = "none";
+    scanGuide.style.display = "block";
+    
+    // B. 手動啟動 MindAR 系統 (這能解決黑屏問題)
+    const arSystem = sceneEl.systems['mindar-image-system'];
+    if (arSystem) {
+        arSystem.start(); 
+    }
 
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-        <div id="targets-container"></div>
-    </a-scene>
-
-    <script>
-        const assetContainer = document.querySelector("#assets-list");
-        const targetsContainer = document.querySelector("#targets-container");
-        const uiOverlay = document.querySelector("#ui-overlay");
-        const startBtn = document.querySelector("#start-btn");
-        const statusText = document.querySelector("#status");
-        const scanGuide = document.querySelector("#scan-guide");
-        const sceneEl = document.querySelector("#ar-scene");
-
-        const TOTAL = 7;
-        let loadedCount = 0;
-        
-        // 生成 7 個 .mind 檔案的路徑字串 (用分號隔開)
-        const mindFiles = Array.from({length: TOTAL}, (_, i) => `./${(i+1).toString().padStart(2, '0')}.mind`).join('; ');
-        
-        // 動態設定 scene 的 mindar-image 參數
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${mindFiles}; autoStart: true; uiScanning: no; uiLoading: no;`);
-
-        // --- 動態生成 01 到 07 的資源 ---
-        for (let i = 1; i <= TOTAL; i++) {
-            const id = i.toString().padStart(2, '0');
-
-            // 1. 生成 Video 資源
-            const video = document.createElement('video');
-            video.id = `v-${id}`;
-            video.src = `./${id}.mp4`;
-            video.setAttribute('preload', 'auto');
-            video.setAttribute('loop', 'true');
-            video.setAttribute('crossorigin', 'anonymous');
-            video.setAttribute('webkit-playsinline', '');
-            video.setAttribute('playsinline', '');
-            video.muted = true;
-            assetContainer.appendChild(video);
-
-            // 2. 生成 AR 辨識目標 (targetIndex 與 mind 檔案順序對應)
-            const targetEntity = document.createElement('a-entity');
-            // 注意：mindar 的 index 依然是從 0 開始數，所以第 1 個檔案對應 index 0
-            targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i-1}`);
-            
-            const videoEntity = document.createElement('a-video');
-            videoEntity.id = `ent-${id}`;
-            videoEntity.setAttribute('src', `#v-${id}`);
-            videoEntity.setAttribute('width', '1');
-            videoEntity.setAttribute('height', '1'); // 預設 1，載入後會自動更新
-            
-            targetEntity.appendChild(videoEntity);
-            targetsContainer.appendChild(targetEntity);
-
-            // 監聽影片載入以調整比例
-            video.addEventListener('loadedmetadata', () => {
-                const aspect = video.videoHeight / video.videoWidth;
-                videoEntity.setAttribute('height', aspect);
-                loadedCount++;
-                statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
-                
-                if (loadedCount === TOTAL) {
-                    document.getElementById("loader").style.display = "none";
-                    statusText.innerText = "全部 7 組資源已就緒";
-                    startBtn.style.display = "block";
-                }
-            });
-
-            // --- 偵測事件 ---
-            targetEntity.addEventListener("targetFound", () => {
-                console.log(`🎯 辨識成功：${id}.mind -> 播放 ${id}.mp4`);
-                scanGuide.style.display = "none";
-                video.muted = false;
-                video.play();
-            });
-
-            targetEntity.addEventListener("targetLost", () => {
-                console.log(`❌ 丟失目標：${id}`);
-                scanGuide.style.display = "block";
-                video.pause();
-            });
-        }
-
-        // --- 啟動與權限解鎖 ---
-        startBtn.addEventListener('click', () => {
-            uiOverlay.style.display = "none";
-            scanGuide.style.display = "block";
-            
-            const allVideos = document.querySelectorAll('video');
-            allVideos.forEach(v => {
-                v.play().then(() => {
-                    v.pause();
-                    v.currentTime = 0;
-                }).catch(e => console.error("Video Unlock Error:", e));
-            });
-        });
-    </script>
-</body>
-</html>
+    // C. 解鎖影片播放
+    const allVideos = document.querySelectorAll('video');
+    allVideos.forEach(v => {
+        v.play().then(() => {
+            v.pause();
+            v.currentTime = 0;
+        }).catch(e => console.error("Video Unlock Error:", e));
+    });
+});
