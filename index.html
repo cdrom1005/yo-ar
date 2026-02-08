@@ -7,7 +7,6 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         
-        /* 載入與啟動遮罩 */
         #ui-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #111; display: flex; flex-direction: column;
@@ -17,8 +16,9 @@
         #start-btn {
             padding: 15px 40px; background: #007AFF; color: white;
             border: none; border-radius: 30px; font-size: 18px;
-            cursor: pointer; display: none; /* 初始隱藏 */
+            cursor: pointer; display: none;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-top: 20px;
         }
 
         .loader {
@@ -28,7 +28,6 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* 掃描引導框 */
         #scan-guide {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 250px; height: 250px; border: 2px dashed rgba(255,255,255,0.5);
@@ -66,30 +65,23 @@
         const statusText = document.querySelector("#status");
         const scanGuide = document.querySelector("#scan-guide");
         const sceneEl = document.querySelector("#ar-scene");
+        const loader = document.querySelector("#loader");
 
         const TOTAL = 7;
         let loadedCount = 0;
 
-        // --- 1. 設定 MindAR 參數 (保留你原本的 autoStart: true) ---
+        // --- 1. 設定 MindAR (改回 autoStart: true) ---
+        // 組合字串: ./01.mind;./02.mind;...
         const mindFiles = Array.from({length: TOTAL}, (_, i) => `./${(i+1).toString().padStart(2, '0')}.mind`).join(';');
+        
+        // 關鍵回歸：使用 autoStart: true，這跟原本正常的 code 一樣
         sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${mindFiles}; autoStart: true; uiScanning: no; uiLoading: no;`);
 
-        // --- 2. 檢查載入進度的共用函式 ---
-        const checkReady = () => {
-            loadedCount++;
-            statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
-            if (loadedCount >= TOTAL) {
-                document.getElementById("loader").style.display = "none";
-                statusText.innerText = "準備就緒";
-                startBtn.style.display = "block";
-            }
-        };
-
-        // --- 3. 動態生成資源 (完全套用你原本的邏輯) ---
+        // --- 2. 迴圈生成 7 組資源 ---
         for (let i = 1; i <= TOTAL; i++) {
             const id = i.toString().padStart(2, '0');
 
-            // 生成 Video 標籤
+            // 建立 Video
             const video = document.createElement('video');
             video.id = `v-${id}`;
             video.src = `./${id}.mp4`;
@@ -98,10 +90,10 @@
             video.setAttribute('crossorigin', 'anonymous');
             video.setAttribute('webkit-playsinline', '');
             video.setAttribute('playsinline', '');
-            video.muted = true; // 原本有 muted
+            video.muted = true;
             assetContainer.appendChild(video);
 
-            // 生成 Entity 標籤
+            // 建立 Target Entity
             const targetEntity = document.createElement('a-entity');
             targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i-1}`);
             
@@ -110,60 +102,73 @@
             videoEntity.setAttribute('src', `#v-${id}`);
             videoEntity.setAttribute('width', '1');
             videoEntity.setAttribute('height', '1');
-            videoEntity.setAttribute('position', '0 0 0');
             
             targetEntity.appendChild(videoEntity);
             targetsContainer.appendChild(targetEntity);
 
-            // --- 處理影片比例 (對應你原本的 1.) ---
-            video.addEventListener('loadedmetadata', () => {
+            // 載入檢查
+            const checkLoad = () => {
                 const aspect = video.videoHeight / video.videoWidth;
                 videoEntity.setAttribute('height', aspect);
-                checkReady();
-            });
-            // 預防快取導致沒觸發事件
-            if (video.readyState >= 1) checkReady();
+                loadedCount++;
+                statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
+                
+                if (loadedCount === TOTAL) {
+                    loader.style.display = "none";
+                    statusText.innerText = "準備就緒";
+                    startBtn.style.display = "block";
+                }
+            };
 
-            // --- 掃描偵測邏輯 (對應你原本的 3.) ---
+            video.addEventListener('loadedmetadata', checkLoad);
+            // 保險：如果快取秒載
+            if (video.readyState >= 1) checkLoad();
+
+            // 偵測邏輯
             targetEntity.addEventListener("targetFound", () => {
-                console.log(`🎯 掃描成功 ${id}：開始播放`);
+                console.log(`🎯 掃描成功: ${id}`);
                 scanGuide.style.display = "none";
-                video.muted = false; // 取消靜音
+                video.muted = false;
                 video.play();
             });
 
             targetEntity.addEventListener("targetLost", () => {
-                console.log(`❌ 丟失目標 ${id}：暫停`);
+                console.log(`❌ 丟失目標: ${id}`);
                 scanGuide.style.display = "block";
                 video.pause();
             });
         }
 
-        // --- 4. 啟動邏輯 (對應你原本的 2.) ---
+        // --- 3. 啟動按鈕 (完全照搬原本的邏輯) ---
         startBtn.addEventListener('click', () => {
-            uiOverlay.style.display = "none"; // 移除遮罩，此時相機應該已經在後台啟動
+            uiOverlay.style.display = "none"; 
             scanGuide.style.display = "block";
             
-            // 關鍵：在使用者點擊時「啟動」影片但不播放 (或是播了立刻停)
+            // 這裡不做 arSystem.start()，因為 autoStart: true 已經在背景跑了
+            // 我們只負責「解鎖影片」
             const allVideos = document.querySelectorAll('video');
             allVideos.forEach(v => {
                 v.play().then(() => {
                     v.pause();
-                    v.currentTime = 0; // 重設回開頭
-                    console.log(`影音權限已解鎖，等待掃描 ${v.id}`);
-                }).catch(err => console.log("影片解鎖忽略", err));
+                    v.currentTime = 0;
+                }).catch(e => console.log("Unlock info:", e));
             });
+            console.log("影音權限已解鎖，等待掃描");
         });
 
-        // 預留一個全螢幕點擊保險 (對應你原本的保險)
-        window.addEventListener("click", () => {
-            const allVideos = document.querySelectorAll('video');
-            allVideos.forEach(v => {
-                if (uiOverlay.style.display === "none" && v.paused && !v.ended) {
-                    // 只有在掃描到且影片沒在動時才嘗試播放
-                }
-            });
-        });
+        // --- 4. 預防機制 ---
+        // 如果 1 秒後還沒載完，檢查一下是不是有影片已經好了但沒觸發事件
+        setTimeout(() => {
+            if (loadedCount < TOTAL) {
+                document.querySelectorAll('video').forEach(v => {
+                   if (v.readyState >= 1 && !v.getAttribute('data-checked')) {
+                       // 這裡只是一個額外的觸發，避免卡住
+                       v.setAttribute('data-checked', 'true');
+                       v.dispatchEvent(new Event('loadedmetadata'));
+                   }
+                });
+            }
+        }, 1000);
     </script>
 </body>
 </html>
