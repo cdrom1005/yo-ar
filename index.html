@@ -47,7 +47,7 @@
     <div id="scan-guide"></div>
 
     <a-scene 
-        id="ar-scene"
+        mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: no; uiLoading: no;" 
         renderer="antialias: true; precision: highp; colorManagement: true;" 
         color-space="sRGB" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         
@@ -65,17 +65,12 @@
         const startBtn = document.querySelector("#start-btn");
         const statusText = document.querySelector("#status");
         const scanGuide = document.querySelector("#scan-guide");
-        const sceneEl = document.querySelector("#ar-scene");
 
+        // 設定總數為 7
         const TOTAL = 7;
         let loadedCount = 0;
 
-        // --- 1. 設定 MindAR 參數 ---
-        const mindFiles = Array.from({length: TOTAL}, (_, i) => `./${(i+1).toString().padStart(2, '0')}.mind`).join(';');
-        // 設定 autoStart: true 讓它自動請求相機，但我們用 overlay 擋住直到載入完成
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${mindFiles}; autoStart: true; uiScanning: no; uiLoading: no;`);
-
-        // --- 2. 檢查載入進度 ---
+        // 檢查是否全部載入完成
         const checkReady = () => {
             loadedCount++;
             statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
@@ -86,14 +81,15 @@
             }
         };
 
-        // --- 3. 動態生成資源 ---
-        for (let i = 1; i <= TOTAL; i++) {
-            const id = i.toString().padStart(2, '0');
+        // --- 核心迴圈：自動生成 7 組對應 ---
+        for (let i = 0; i < TOTAL; i++) {
+            // 檔名邏輯：index 0 -> 檔名 01.mp4 (所以是 i+1)
+            const fileId = (i + 1).toString().padStart(2, '0');
 
-            // Video
+            // 1. 創建 Video 標籤
             const video = document.createElement('video');
-            video.id = `v-${id}`;
-            video.src = `./${id}.mp4`;
+            video.id = `v-${fileId}`;
+            video.src = `./${fileId}.mp4`; // 你的影片檔名必須是 01.mp4 到 07.mp4
             video.setAttribute('preload', 'auto');
             video.setAttribute('loop', 'true');
             video.setAttribute('crossorigin', 'anonymous');
@@ -102,13 +98,14 @@
             video.muted = true; 
             assetContainer.appendChild(video);
 
-            // Entity
+            // 2. 創建 Entity (目標)
+            // 這裡的 targetIndex: i 對應你在編譯器上傳圖片的順序 (第1張是0, 第2張是1...)
             const targetEntity = document.createElement('a-entity');
-            targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i-1}`);
+            targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
             const videoEntity = document.createElement('a-video');
-            videoEntity.id = `ent-${id}`;
-            videoEntity.setAttribute('src', `#v-${id}`);
+            videoEntity.id = `ent-${fileId}`;
+            videoEntity.setAttribute('src', `#v-${fileId}`);
             videoEntity.setAttribute('width', '1');
             videoEntity.setAttribute('height', '1');
             videoEntity.setAttribute('position', '0 0 0');
@@ -116,41 +113,41 @@
             targetEntity.appendChild(videoEntity);
             targetsContainer.appendChild(targetEntity);
 
-            // 載入處理
+            // 3. 監聽載入狀況 (調整比例)
             video.addEventListener('loadedmetadata', () => {
                 const aspect = video.videoHeight / video.videoWidth;
                 videoEntity.setAttribute('height', aspect);
                 checkReady();
             });
+            // 保險起見
             if (video.readyState >= 1) checkReady();
 
-            // 偵測邏輯
+            // 4. 偵測與遺失邏輯
             targetEntity.addEventListener("targetFound", () => {
-                console.log(`🎯 掃描成功 ${id}`);
+                console.log(`🎯 發現目標 ${fileId} (Index: ${i})`);
                 scanGuide.style.display = "none";
                 video.muted = false;
                 video.play();
             });
 
             targetEntity.addEventListener("targetLost", () => {
-                console.log(`❌ 丟失目標 ${id}`);
+                console.log(`❌ 遺失目標 ${fileId}`);
                 scanGuide.style.display = "block";
                 video.pause();
             });
         }
 
-        // --- 4. 啟動按鈕 ---
+        // --- 啟動按鈕 (用來解鎖 iOS 聲音與影片) ---
         startBtn.addEventListener('click', () => {
-            uiOverlay.style.display = "none"; 
+            uiOverlay.style.display = "none";
             scanGuide.style.display = "block";
             
-            // 解鎖所有影片
             const allVideos = document.querySelectorAll('video');
             allVideos.forEach(v => {
                 v.play().then(() => {
                     v.pause();
-                    v.currentTime = 0; 
-                }).catch(err => console.log("Video access:", err));
+                    v.currentTime = 0;
+                }).catch(err => console.log("影片權限解鎖:", err));
             });
         });
     </script>
