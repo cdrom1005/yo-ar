@@ -7,7 +7,6 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         
-        /* 載入與啟動遮罩 */
         #ui-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #111; display: flex; flex-direction: column;
@@ -17,7 +16,7 @@
         #start-btn {
             padding: 15px 40px; background: #007AFF; color: white;
             border: none; border-radius: 30px; font-size: 18px;
-            cursor: pointer; display: none; /* 初始隱藏 */
+            cursor: pointer; display: none;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
@@ -28,7 +27,6 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* 掃描引導框 */
         #scan-guide {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 250px; height: 250px; border: 2px dashed rgba(255,255,255,0.5);
@@ -66,11 +64,9 @@
         const statusText = document.querySelector("#status");
         const scanGuide = document.querySelector("#scan-guide");
 
-        // 設定總數為 7
         const TOTAL = 7;
         let loadedCount = 0;
 
-        // 檢查是否全部載入完成
         const checkReady = () => {
             loadedCount++;
             statusText.innerText = `資源載入中 (${loadedCount}/${TOTAL})...`;
@@ -81,25 +77,23 @@
             }
         };
 
-        // --- 核心迴圈：自動生成 7 組對應 ---
         for (let i = 0; i < TOTAL; i++) {
-            // 檔名邏輯：index 0 -> 檔名 01.mp4 (所以是 i+1)
             const fileId = (i + 1).toString().padStart(2, '0');
 
-            // 1. 創建 Video 標籤
+            // 1. Video 設定 (加強兼容性)
             const video = document.createElement('video');
             video.id = `v-${fileId}`;
-            video.src = `./${fileId}.mp4`; // 你的影片檔名必須是 01.mp4 到 07.mp4
+            video.src = `./${fileId}.mp4`;
             video.setAttribute('preload', 'auto');
             video.setAttribute('loop', 'true');
             video.setAttribute('crossorigin', 'anonymous');
-            video.setAttribute('webkit-playsinline', '');
-            video.setAttribute('playsinline', '');
+            // 必須明確設為 true，某些 iOS 版本才吃得到
+            video.setAttribute('webkit-playsinline', 'true');
+            video.setAttribute('playsinline', 'true');
             video.muted = true; 
             assetContainer.appendChild(video);
 
-            // 2. 創建 Entity (目標)
-            // 這裡的 targetIndex: i 對應你在編譯器上傳圖片的順序 (第1張是0, 第2張是1...)
+            // 2. 實體設定
             const targetEntity = document.createElement('a-entity');
             targetEntity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
@@ -108,23 +102,24 @@
             videoEntity.setAttribute('src', `#v-${fileId}`);
             videoEntity.setAttribute('width', '1');
             videoEntity.setAttribute('height', '1');
-            videoEntity.setAttribute('position', '0 0 0');
+            
+            // 🔥 關鍵修正：將 Z 軸設為 0.1，避免與圖片重疊 (解決黑畫面/閃爍)
+            videoEntity.setAttribute('position', '0 0 0.1'); 
             
             targetEntity.appendChild(videoEntity);
             targetsContainer.appendChild(targetEntity);
 
-            // 3. 監聽載入狀況 (調整比例)
+            // 3. 載入檢查
             video.addEventListener('loadedmetadata', () => {
                 const aspect = video.videoHeight / video.videoWidth;
                 videoEntity.setAttribute('height', aspect);
                 checkReady();
             });
-            // 保險起見
             if (video.readyState >= 1) checkReady();
 
-            // 4. 偵測與遺失邏輯
+            // 4. 偵測事件
             targetEntity.addEventListener("targetFound", () => {
-                console.log(`🎯 發現目標 ${fileId} (Index: ${i})`);
+                console.log(`🎯 發現目標 ${fileId}`);
                 scanGuide.style.display = "none";
                 video.muted = false;
                 video.play();
@@ -137,17 +132,18 @@
             });
         }
 
-        // --- 啟動按鈕 (用來解鎖 iOS 聲音與影片) ---
+        // 啟動按鈕
         startBtn.addEventListener('click', () => {
             uiOverlay.style.display = "none";
             scanGuide.style.display = "block";
             
             const allVideos = document.querySelectorAll('video');
             allVideos.forEach(v => {
+                // 嘗試播放一小段黑畫面來「暖機」
                 v.play().then(() => {
                     v.pause();
                     v.currentTime = 0;
-                }).catch(err => console.log("影片權限解鎖:", err));
+                }).catch(err => console.log("影片解鎖:", err));
             });
         });
     </script>
